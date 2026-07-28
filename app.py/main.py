@@ -47,7 +47,7 @@ if st.button("送信する"):
 
                 # Gemini 2.5 Flash モデルで回答を生成
                 response = client.models.generate_content(
-                    model="gemini-2.5-flash",
+                    model="gemini-1.5-flash",
                     contents=contents,
                     config={"system_instruction": system_instruction}
                 )
