@@ -30,7 +30,7 @@ if st.button("送信する"):
     else:
         with st.spinner("AI先生が考え中..."):
             try:
-                model = genai.GenerativeModel('gemini-1.5-flash')
+                model = genai.GenerativeModel('models/gemini-1.5-flash')
 
                 # 送信するプロンプトの準備
                 prompt_parts = []
