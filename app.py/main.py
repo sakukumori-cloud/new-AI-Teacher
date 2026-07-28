@@ -1,20 +1,27 @@
 import streamlit as st
-from google import genai
-from google.genai import types
+import openai
 from PIL import Image
+import base64
+import io
 
 # ページ設定
 st.title("🤖 AI Teacher アプリ")
 st.write("画像や質問を入力すると、AIの先生が分かりやすく解説します！")
 
 # APIキーの設定
-api_key = st.secrets.get("GEMINI_API_KEY")
+api_key = st.secrets.get("OPENAI_API_KEY")
 if not api_key:
-    st.error("APIキーの設定を確認してください。SecretsにGEMINI_API_KEYが登録されているか確認しましょう。")
+    st.error("APIキーの設定を確認してください。SecretsにOPENAI_API_KEYが登録されているか確認しましょう。")
     st.stop()
 
-# クライアントの作成
-client = genai.Client(api_key=api_key)
+# Clientの作成
+client = openai.OpenAI(api_key=api_key)
+
+# 画像をbase64エンコードする関数
+def encode_image(image):
+    buffered = io.BytesIO()
+    image.save(buffered, format="JPEG")
+    return base64.b64encode(buffered.getvalue()).decode('utf-8')
 
 # ユーザー入力エリア
 user_input = st.text_input("質問をどうぞ：", placeholder="例：(3) を教えてください")
@@ -32,29 +39,40 @@ if st.button("送信する"):
     else:
         with st.spinner("AI先生が考え中..."):
             try:
-                # 1. コンテンツ（テキスト・画像）の準備
-                contents = []
+                # ユーザーメッセージの作成
+                user_content = []
 
                 if user_input:
-                    contents.append(user_input)
+                    user_content.append({"type": "text", "text": user_input})
 
                 if image is not None:
-                    contents.append(image)
+                    # 画像をJPEG形式でエンコードして追加
+                    base64_image = encode_image(image.convert("RGB"))
+                    user_content.append({
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{base64_image}"
+                        }
+                    })
 
-                # 2. システム指示（システムプロンプト）の設定
-                config = types.GenerateContentConfig(
-                    system_instruction="あなたは親切で分かりやすい学校の先生です。"
+                # API呼び出し
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "あなたは親切で分かりやすい学校の先生です。"
+                        },
+                        {
+                            "role": "user",
+                            "content": user_content
+                        }
+                    ],
+                    max_tokens=1000
                 )
 
-                # 3. モデル呼び出し（標準・安定の gemini-2.0-flash）
-                response = client.models.generate_content(
-                    model='gemini-2.0-flash',
-                    contents=contents,
-                    config=config
-                )
-
-                # 4. 画面に表示
-                st.write(response.text)
+                # 画面に表示
+                st.write(response.choices[0].message.content)
 
             except Exception as e:
                 st.error(f"エラーが発生しました: {e}")
