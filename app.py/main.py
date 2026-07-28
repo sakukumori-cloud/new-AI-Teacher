@@ -31,8 +31,8 @@ if st.button("送信する"):
         with st.spinner("AI先生が考え中..."):
             try:
     
-                # 標準的な軽量・高速モデル（画像読み込み対応）
-　　　　　　　　　　model = genai.GenerativeModel('gemini-1.5-flash')
+                # 標準的な軽量・高速モデル（画像読み込み対応
+                model = genai.GenerativeModel('gemini-1.5-flash')
 
 　　　　　　　　　# または、高性能モデルを使いたい場合
 　　　　　　　　　　model = genai.GenerativeModel('gemini-1.5-pro')
