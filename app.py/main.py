@@ -1,5 +1,6 @@
 import streamlit as st
 from google import genai
+from google.genai import types
 from PIL import Image
 
 # ページ設定
@@ -12,7 +13,7 @@ if not api_key:
     st.error("APIキーの設定を確認してください。SecretsにGEMINI_API_KEYが登録されているか確認しましょう。")
     st.stop()
 
-# 新しいライブラリでのクライアント作成
+# クライアントの作成
 client = genai.Client(api_key=api_key)
 
 # ユーザー入力エリア
@@ -31,24 +32,28 @@ if st.button("送信する"):
     else:
         with st.spinner("AI先生が考え中..."):
             try:
-                # 1. プロンプトの準備
-                prompt_parts = []
-                system_prompt = "あなたは親切で分かりやすい学校の先生です。"
-                prompt_parts.append(system_prompt)
+                # 1. コンテンツ（テキスト・画像）の準備
+                contents = []
 
                 if user_input:
-                    prompt_parts.append(user_input)
+                    contents.append(user_input)
 
                 if image is not None:
-                    prompt_parts.append(image)
+                    contents.append(image)
 
-                # 2. 新ライブラリ（google-genai）での呼び出し
-                response = client.models.generate_content(
-                    model='gemini-1.5-flash',
-                    contents=prompt_parts
+                # 2. システム指示（システムプロンプト）の設定
+                config = types.GenerateContentConfig(
+                    system_instruction="あなたは親切で分かりやすい学校の先生です。"
                 )
 
-                # 3. 画面に表示
+                # 3. モデル呼び出し（標準・安定の gemini-2.0-flash）
+                response = client.models.generate_content(
+                    model='gemini-2.0-flash',
+                    contents=contents,
+                    config=config
+                )
+
+                # 4. 画面に表示
                 st.write(response.text)
 
             except Exception as e:
