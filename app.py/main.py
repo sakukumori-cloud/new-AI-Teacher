@@ -1,17 +1,18 @@
 import streamlit as st
-from google import genai
+import google.generativeai as genai
 from PIL import Image
 
 # ページ設定
 st.title("🤖 AI Teacher アプリ")
 st.write("画像や質問を入力すると、AIの先生が分かりやすく解説します！")
 
-# StreamlitのSecretsからAPIキーを取得してクライアントを初期化
-try:
-    client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-except Exception as e:
+# APIキーの設定
+api_key = st.secrets.get("GEMINI_API_KEY")
+if not api_key:
     st.error("APIキーの設定を確認してください。SecretsにGEMINI_API_KEYが登録されているか確認しましょう。")
     st.stop()
+
+genai.configure(api_key=api_key)
 
 # ユーザー入力エリア
 user_input = st.text_input("質問をどうぞ：", placeholder="例：（３）を教えてください")
@@ -19,7 +20,6 @@ uploaded_file = st.file_uploader("画像をアップロード（PNG, JPG, JPEG�
 
 image = None
 if uploaded_file is not None:
-    # 画像を開いて表示
     image = Image.open(uploaded_file)
     st.image(image, caption="アップロードされた画像", use_column_width=True)
 
@@ -30,27 +30,26 @@ if st.button("送信する"):
     else:
         with st.spinner("AI先生が考え中..."):
             try:
-                # 先生としてのシステムプロンプト（指示書き）
-                system_instruction = (
+                # 安定版モデルの初期化
+                model = genai.GenerativeModel("gemini-1.5-flash")
+
+                # 送信するプロンプトの準備
+                prompt_parts = []
+                system_prompt = (
                     "あなたは親切で分かりやすい学校の先生です。"
-                    "小中学生にも伝わるように丁寧な言葉遣いで、ステップを踏んで解説してください。"
+                    "小中学生にも伝わるように丁寧な言葉遣いで、ステップを踏んで解説してください。\n\n"
                 )
-
-                # 送信するコンテンツの準備
-                contents = []
-                if image:
-                    contents.append(image)
+                
                 if user_input:
-                    contents.append(user_input)
+                    prompt_parts.append(system_prompt + f"質問：{user_input}")
                 else:
-                    contents.append("この画像について詳しく解説してください。")
+                    prompt_parts.append(system_prompt + "この画像の問題について詳しく解説してください。")
 
-                # Gemini 2.0 Flash モデルで回答を生成
-                response = client.models.generate_content(
-                    model="gemini-2.0-flash",
-                    contents=contents,
-                    config={"system_instruction": system_instruction}
-                )
+                if image:
+                    prompt_parts.append(image)
+
+                # 回答の生成
+                response = model.generate_content(prompt_parts)
 
                 # 回答の表示
                 st.success("AI先生からの回答：")
