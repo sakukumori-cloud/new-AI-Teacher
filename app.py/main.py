@@ -30,8 +30,8 @@ if st.button("送信する"):
     else:
         with st.spinner("AI先生が考え中..."):
             try:
-                # 安定版モデルの初期化
-                model = genai.GenerativeModel("gemini-1.5-flash")
+                # 軽量・高速な1.5-flash-8bモデルを使用
+                model = genai.GenerativeModel("gemini-1.5-flash-8b")
 
                 # 送信するプロンプトの準備
                 prompt_parts = []
