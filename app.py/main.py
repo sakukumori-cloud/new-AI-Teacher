@@ -1,5 +1,5 @@
 import streamlit as st
-import google.generativeai as genai
+from google import genai
 from PIL import Image
 
 # ページ設定
@@ -12,10 +12,11 @@ if not api_key:
     st.error("APIキーの設定を確認してください。SecretsにGEMINI_API_KEYが登録されているか確認しましょう。")
     st.stop()
 
-genai.configure(api_key=api_key)
+# 新しいライブラリでのクライアント作成
+client = genai.Client(api_key=api_key)
 
 # ユーザー入力エリア
-user_input = st.text_input("質問をどうぞ：", placeholder="例：（３）を教えてください")
+user_input = st.text_input("質問をどうぞ：", placeholder="例：(3) を教えてください")
 uploaded_file = st.file_uploader("画像をアップロード（PNG, JPG, JPEG）", type=["png", "jpg", "jpeg"])
 
 image = None
@@ -30,28 +31,24 @@ if st.button("送信する"):
     else:
         with st.spinner("AI先生が考え中..."):
             try:
-                model = genai.GenerativeModel('models/gemini-1.5-flash')
-
-                # 送信するプロンプトの準備
+                # 1. プロンプトの準備
                 prompt_parts = []
-                system_prompt = (
-                    "あなたは親切で分かりやすい学校の先生です。"
-                    "小中学生にも伝わるように丁寧な言葉遣いで、ステップを踏んで解説してください。\n\n"
-                )
-                
-                if user_input:
-                    prompt_parts.append(system_prompt + f"質問：{user_input}")
-                else:
-                    prompt_parts.append(system_prompt + "この画像の問題について詳しく解説してください。")
+                system_prompt = "あなたは親切で分かりやすい学校の先生です。"
+                prompt_parts.append(system_prompt)
 
-                if image:
+                if user_input:
+                    prompt_parts.append(user_input)
+
+                if image is not None:
                     prompt_parts.append(image)
 
-                # 回答の生成
-                response = model.generate_content(prompt_parts)
+                # 2. 新ライブラリ（google-genai）での呼び出し
+                response = client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=prompt_parts
+                )
 
-                # 回答の表示
-                st.success("AI先生からの回答：")
+                # 3. 画面に表示
                 st.write(response.text)
 
             except Exception as e:
