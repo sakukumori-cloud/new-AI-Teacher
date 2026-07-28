@@ -1,70 +1,60 @@
 import base64
 import io
+import os
 import openai
 from PIL import Image
 import streamlit as st
 
-# ページ設定
-st.set_page_config(page_title="AI Teacher アプリ", page_icon="🤖")
-
-# --------------------------------------------------
-# 1. サイドバー（管理・カスタマイズ画面）
-# --------------------------------------------------
-st.sidebar.header("⚙️ 先生のカスタマイズ")
-
-# ① キャッチコピー・挨拶の変更
-custom_greeting = st.sidebar.text_input(
-    "あいさつ・キャッチ",
-    value="こんにちは！チャット先生だよ。何でも質問してね！",
-)
-
-# ② 画像の指定（URLまたはファイルアップロード）
-image_option = st.sidebar.radio(
-    "先生の画像の指定方法", ["URLで指定", "画像をアップロード"]
-)
-
-teacher_img = None
-if image_option == "URLで指定":
-  default_url = "https://raw.githubusercontent.com/twitter/twemoji/master/assets/72x72/1f9d1-200d-1f3eb.png"
-  img_url = st.sidebar.text_input("画像URL", value=default_url)
-  teacher_img = img_url
-else:
-  uploaded_teacher_img = st.sidebar.file_uploader(
-      "先生の画像をアップロード", type=["png", "jpg", "jpeg"]
-  )
-  if uploaded_teacher_img:
-    teacher_img = Image.open(uploaded_teacher_img)
-
-# ③ システムプロンプト（性格・ルール）の編集
-system_prompt = st.sidebar.text_area(
-    "先生の性格・ルール（プロンプト）",
-    value="""あなたは明るく親しみやすい学校の先生「チャット先生」です。
-以下のルールを守って回答してください：
-- 丁寧で分かりやすい言葉遣い（親しみやすい敬語）を使う
-- 難しい専門用語は身近な例えを使って説明する
-- 最後に生徒を励ますような前向きな一言を添える""",
-    height=150,
+# ページ基本設定
+st.set_page_config(
+    page_title="チャット先生！ - 個別指導アシスタント",
+    page_icon="👩‍🏫",
+    layout="centered",
 )
 
 # --------------------------------------------------
-# 2. メイン画面表示（カスタマイズ結果を即座に反映）
+# 1. ヘッダーエリア（画像とメッセージの配置）
 # --------------------------------------------------
-st.title("🤖 AI Teacher アプリ")
+st.caption("－個別指導アシスタント－")
+st.title("チャット先生！")
 
-col1, col2 = st.columns([1, 4])
+col1, col2 = st.columns([1, 1])
+
 with col1:
-  if teacher_img:
-    st.image(teacher_img, width=100)
+  # GitHub直下に teacher.jpg を置いた場合読み込みます
+  if os.path.exists("teacher.jpg"):
+    st.image("teacher.jpg", use_column_width=True)
   else:
-    st.write("🤖")  # 画像がない場合の予備表示
-with col2:
-  # サイドバーで入力したキャッチコピーを表示
-  st.write(f"### {custom_greeting}")
+    # 画像が未アップロードの場合の予備（サンプルWeb画像）
+    st.image(
+        "https://raw.githubusercontent.com/twitter/twemoji/master/assets/72x72/1f9d1-200d-1f3eb.png",
+        width=200,
+    )
 
-st.divider()
+with col2:
+  st.info(
+      "チャット先生です！\n\n"
+      "私は間違えた問題、分からない問題、解き方が自信がない問題等について、"
+      "チャットをしながら解決し、弱点克服を目指します。\n\n"
+      "「今、分からない！」に即、対応、あなたの学習をサポートします。"
+  )
+
+st.markdown("---")
 
 # --------------------------------------------------
-# 3. APIキーのチェック
+# 2. 学習の仕方ガイド
+# --------------------------------------------------
+st.subheader("🔷 学習の仕方")
+st.write(
+    "1. 下の **「画像をアップロード」** に問題の写真を貼り付けます（任意）。\n"
+    "2. **「質問・問題番号入力」** に「(3)が分かりません」などと入力します。\n"
+    "3. **「送信する」** ボタンを押すと、チャット先生が解説します！"
+)
+
+st.markdown("---")
+
+# --------------------------------------------------
+# 3. APIキー設定の確認
 # --------------------------------------------------
 api_key = st.secrets.get("OPENAI_API_KEY")
 if not api_key:
@@ -83,33 +73,40 @@ def encode_image(image):
 
 
 # --------------------------------------------------
-# 4. ユーザー質問入力エリア
+# 4. ユーザー入力・アップロードエリア
 # --------------------------------------------------
-user_input = st.text_input(
-    "質問をどうぞ：", placeholder="例：(3) を教えてください"
-)
+# ① 問題貼り付け（画像）
 uploaded_file = st.file_uploader(
-    "質問の画像をアップロード（PNG, JPG, JPEG）",
-    type=["png", "jpg", "jpeg"],
+    "📷 問題を貼り付け（画像をアップロード）", type=["png", "jpg", "jpeg"]
 )
 
 image = None
 if uploaded_file is not None:
   image = Image.open(uploaded_file)
-  st.image(image, caption="アップロードされた画像", use_column_width=True)
+  st.image(
+      image, caption="貼り付けされた問題画像", use_column_width=True
+  )
+
+# ② 質問・問題番号入力
+user_input = st.text_input(
+    "✍️ 質問・問題番号を入力",
+    placeholder="例：(3)の解説をお願いします！",
+)
 
 # --------------------------------------------------
-# 5. 送信処理
+# 5. 送信・AI回答エリア
 # --------------------------------------------------
-if st.button("送信する"):
+if st.button("送信する", type="primary"):
   if not user_input and not uploaded_file:
-    st.warning("質問を入力するか、画像をアップロードしてください。")
+    st.warning("質問を入力するか、問題を貼り付けてください。")
   else:
-    with st.spinner("AI先生が考え中..."):
+    with st.spinner("チャット先生が考え中..."):
       try:
         user_content = []
+
         if user_input:
           user_content.append({"type": "text", "text": user_input})
+
         if image is not None:
           base64_image = encode_image(image.convert("RGB"))
           user_content.append({
@@ -117,7 +114,14 @@ if st.button("送信する"):
               "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
           })
 
-        # API呼び出し（サイドバーで編集したプロンプトを適用）
+        # システムプロンプト（先生のキャラクター）
+        system_prompt = """
+                あなたは丁寧で親しみやすい個別指導の先生「チャット先生」です。
+                生徒が「今、分からない！」と思っている問題や問題番号に対して、分かりやすく親切に答えてください。
+                解き方のヒントやステップを丁寧に教え、最後は励ましの言葉で締めくくってください。
+                """
+
+        # API実行
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
@@ -127,7 +131,7 @@ if st.button("送信する"):
             max_tokens=1000,
         )
 
-        st.markdown("### 👨‍🏫 チャット先生からの回答")
+        st.markdown("### 👩‍🏫 チャット先生からの回答")
         st.write(response.choices[0].message.content)
 
       except Exception as e:
