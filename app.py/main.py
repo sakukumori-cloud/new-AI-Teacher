@@ -14,7 +14,7 @@ except Exception as e:
     st.stop()
 
 # ユーザー入力エリア
-user_input = st.text_input("質問をどうぞ：", placeholder="例：（１）を教えてください")
+user_input = st.text_input("質問をどうぞ：", placeholder="例：（３）を教えてください")
 uploaded_file = st.file_uploader("画像をアップロード（PNG, JPG, JPEG）", type=["png", "jpg", "jpeg"])
 
 image = None
@@ -45,9 +45,9 @@ if st.button("送信する"):
                 else:
                     contents.append("この画像について詳しく解説してください。")
 
-                # Gemini 2.5 Flash モデルで回答を生成
+                # Gemini 2.0 Flash モデルで回答を生成
                 response = client.models.generate_content(
-                    model="gemini-1.5-flash",
+                    model="gemini-2.0-flash",
                     contents=contents,
                     config={"system_instruction": system_instruction}
                 )
