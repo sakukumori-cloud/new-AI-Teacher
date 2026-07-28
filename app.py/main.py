@@ -44,7 +44,7 @@ if st.button("送信する"):
 
                 # 2. 新ライブラリ（google-genai）での呼び出し
                 response = client.models.generate_content(
-                    model='gemini-2.5-flash',
+                    model='gemini-2.0-flash',
                     contents=prompt_parts
                 )
 
