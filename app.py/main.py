@@ -72,10 +72,9 @@ st.sidebar.subheader("3. 案内メッセージの変更")
 custom_info = st.sidebar.text_area(
     "メッセージ文章",
     value=(
-        "チャット先生です！\n\n"
-        "私は間違えた問題、分からない問題、解き方が自信がない問題等について、"
-        "チャットをしながら解決し、弱点克服を目指します。\n\n"
-        "「今、分からない！」に即、対応、あなたの学習をサポートします。"
+        "挽回先生です！\n\n"
+        "間違えた問題や解き方に自信がない問題について、"
+        "一緒にやり取りしながら解決を目指します。"
     ),
     height=150
 )
@@ -83,15 +82,21 @@ custom_info = st.sidebar.text_area(
 # 4. プロンプト調整機能
 st.sidebar.markdown("---")
 st.sidebar.subheader("🧪 AI先生の指示（プロンプト調整）")
-st.sidebar.caption("先生の性格や答え方をここで直接テスト・修正できます。")
 
-default_system_prompt = """あなたは親切で教え上手な個別指導の先生「チャット先生」です。
+default_system_prompt = """あなたは個別指導のベテラン講師「挽回先生」です。生徒のすぐ横でノートを一緒に覗き込みながら、一歩ずつ対話で解いていきます。
 
-【重要ルール】
-1. 画像が送られた場合は、まず画像内の問題テキスト、図、記号、問題番号を正確に読み取り、何についての問題か（例：岩石の性質、二次関数など）を特定してください。
-2. 抽象的な精神論（「図をよく見ましょう」など）だけで終わらせず、具体的な手順・計算式・解法のポイントを明確に示してください。
-3. 生徒が「答えを教えて」「答えは？」と具体的に聞いてきた場合は、焦らさずにズバリ結論や答えをわかりやすく提示した上で解説してください。
-4. 生徒を否定せず、最後は前向きになれる温かい言葉で励ましてください。"""
+【絶対ルール：オウム返しの禁止と「指差しヒント」】
+1. 「どれが気になる？」「具体的に教えて」という丸投げの聞き返しは【完全禁止】です。
+   生徒が「分からない」「ヒント」と言ったら、質問で返すのではなく、図や問題文の「見るべき注目ポイント」を先生から1つ指し示してください。
+
+2. ヒントの出し方（具象的な指差し）
+   「低気圧が発達しやすい場所＝中心の近くや前線の近く」といった知識を踏まえて、「図の中心に近い1〜4の番号はどれかな？」のように、生徒が図を探せるヒントを出してください。
+
+3. 1回の発言は80文字以内（2〜3行）
+   長文解説は一切書かず、LINEのように短文でキャッチボールをしてください。
+
+4. 口調とマインド
+   「（4）のアだね！」「よし、じゃあ図の真ん中あたりを見てみようか」といった、温かく親しみやすい先生の話し言葉（〜だね、〜かな？）で接してください。"""
 
 system_prompt = st.sidebar.text_area(
     "システムプロンプト（AIへの指示文）",
@@ -124,8 +129,8 @@ st.markdown("---")
 st.subheader("🔷 学習の仕方")
 st.write(
     "1. 下の **「画像をアップロード」** に問題の写真を貼り付けます（任意）。\n"
-    "2. **「質問・問題番号入力」** に「(3)が分かりません」などと入力します。\n"
-    "3. **「送信する」** ボタンを押すと、チャット先生が解説します！"
+    "2. **「質問・問題番号入力」** に「(4)のアが分かりません」などと入力します。\n"
+    "3. **「送信する」** ボタンを押すと、挽回先生と一緒に解き進められます！"
 )
 
 st.markdown("---")
@@ -140,11 +145,10 @@ if not api_key:
 
 client = openai.OpenAI(api_key=api_key)
 
-# 画像エンコード関数の強化（リサイズとRGB変換による精度向上）
 def encode_image(image):
     buffered = io.BytesIO()
     img = image.convert("RGB")
-    img.thumbnail((1024, 1024))  # Vision API用に最適なサイズに調整
+    img.thumbnail((1024, 1024))
     img.save(buffered, format="JPEG", quality=85)
     return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
@@ -155,7 +159,6 @@ st.subheader("💬 チャット履歴")
 
 for msg in st.session_state.messages:
     if msg["role"] == "user":
-        # ユーザー発言のテキスト部分を取得して表示
         text_content = ""
         if isinstance(msg["content"], list):
             for c in msg["content"]:
@@ -183,7 +186,7 @@ if uploaded_file is not None:
 
 user_input = st.text_input(
     "✍️ 質問・問題番号を入力",
-    placeholder="例：(3)の解説をお願いします！",
+    placeholder="例：(4)のアの解説をお願いします！",
 )
 
 # --------------------------------------------------
@@ -195,31 +198,34 @@ if st.button("送信する", type="primary"):
     else:
         with st.spinner("挽回先生がノートを確認中..."):
             try:
-                # ユーザーの発言（テキスト）を用意
                 user_text = user_input if user_input else "この問題を教えてください。"
-
-                # 履歴用のユーザーメッセージ構築
                 user_message_for_history = {"role": "user", "content": user_text}
                 
-                # API送信用のメッセージリスト作成
                 api_messages = [{"role": "system", "content": system_prompt}] + st.session_state.messages
 
-                # 画像がある場合、今回の最新メッセージに画像をアタッチする
                 if image is not None:
                     base64_image = encode_image(image)
-                   # 画像がある場合の指示文（main.py 内）
-　　　　　　　　　　　# 画像がある場合の指示文（main.py 内）
-　　　　　　　　　　　　current_user_content = [ { "type": "text", "text": ( f"{user_text}\n\n" "【挽回先生としての会話ルール】\n"
-          　　　　　　  "1. 文字起こしや長文解説は禁止です。\n"
-          　　　　　　  "2. 生徒から「分からない」「ヒント」と言われたら、「どれが気になる？」と聞き返してはいけません！"
-          　　　　　　　　  "必ず『図のどこに注目すればいいか』の具象的なヒントや着眼点を1つ出してください。（例：「中心の近くにある記号や、等圧線が混み合っている場所に着目してみよう。1〜4の中でどれが一番中心に近いかな？」）\n"
-          　　　　　　  "3. 1回の発言は2〜3行（80文字以内）で、次に生徒が観察すべきポイントを短く示してください。") },
-   　　　　　　　　　　　　　　　　　　　　　　　　 { "type": "image_url","image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},}]
+                    current_user_content = [
+                        {
+                            "type": "text", 
+                            "text": (
+                                f"{user_text}\n\n"
+                                "【挽回先生としての会話ルール】\n"
+                                "1. 文字起こしや長文解説は禁止です。\n"
+                                "2. 生徒から『分からない』『ヒント』と言われたら、『どれが気になる？』と聞き返してはいけません！"
+                                "必ず『図のどこに注目すればいいか』の具体的なヒントや着眼点を1つ出してください。（例：『中心の近くにある記号や、等圧線が混み合っている場所に着目してみよう。1〜4の中でどれが一番中心に近いかな？』）\n"
+                                "3. 1回の発言は2〜3行（80文字以内）で、次に生徒が観察すべきポイントを短く示してください。"
+                            )
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
+                        }
+                    ]
                     api_messages.append({"role": "user", "content": current_user_content})
                 else:
                     api_messages.append({"role": "user", "content": user_text})
 
-                # OpenAI APIへリクエスト (gpt-4o-mini)
                 response = client.chat.completions.create(
                     model="gpt-4o-mini",
                     messages=api_messages,
@@ -228,11 +234,9 @@ if st.button("送信する", type="primary"):
 
                 assistant_reply = response.choices[0].message.content
 
-                # セッション履歴にはテキストのみを保存（画像データの累積による認識低下を防止）
                 st.session_state.messages.append(user_message_for_history)
                 st.session_state.messages.append({"role": "assistant", "content": assistant_reply})
 
-                # 画面を更新して最新会話を表示
                 st.rerun()
 
             except Exception as e:
