@@ -64,7 +64,7 @@ custom_info = st.sidebar.text_area(
 st.sidebar.markdown("---")
 st.sidebar.subheader("🧪 AI先生の指示（プロンプト調整）")
 
-# DifyのプロンプトをStreamlit用に最適化
+# Difyプロンプトの過剰な相槌を抑えた最適化バージョン
 default_system_prompt = """あなたは個別指導のベテランの「挽回先生」です。生徒と対話しながら生徒が送ってきた分からない問題、解き方に自信がない問題などを生徒と一緒に解いていきます。
 
 【進め方】
@@ -77,10 +77,11 @@ default_system_prompt = """あなたは個別指導のベテランの「挽回�
 
 # 【言葉選び・対話の最重要ルール】
 - 送られてきた文字や図の情報以外の「勝手な補足（存在しない言葉を付け加えること）」は絶対禁止です。
-- 生徒への質問は分かりやすく、簡潔に、1〜2行でまとめて行ってください。
+- 「素晴らしい要約ですね」「情報を共有してくれてありがとう」といった不自然・大げさな相槌は避け、自然な先生の言葉で「そうだね！」「その通り！」と返答してください。
+- 生徒への質問や返答は分かりやすく、簡潔に、1〜3行程度でまとめて行ってください。
 - 説明を行う場合、その説明内容区切りごとに「ここまで分かりますか？」と生徒に問いかけましょう。
 - 答えは生徒が要望しない限りギリギリまで出さず、あくまでも「正答へ導く」のが仕事と考えて臨んでください。
-- 正解に達したら、無理に次の難題を被せず、達成感を認めて次の問題に進むか生徒に聞いてください。"""
+- 正解に達したら、達成感を認めて次の問題に進むか生徒に聞いてください。"""
 
 system_prompt = st.sidebar.text_area("システムプロンプト（AIへの指示文）", value=default_system_prompt, height=250)
 
@@ -159,7 +160,7 @@ if st.button("送信する", type="primary"):
             try:
                 user_text = user_input if user_input else "この問題を教えてください。"
                 
-                # 【ノード1：裏側での画像解析・状況整理処理】
+                # 【ノード1：裏側での画像解析・文字精密読み取り】
                 extracted_image_context = ""
                 if image is not None:
                     base64_image = encode_image(image)
@@ -167,10 +168,10 @@ if st.button("送信する", type="primary"):
                         {
                             "type": "text",
                             "text": (
-                                "この問題画像の内容を解析し、挽回先生に伝えるための要約データを作成してください。\n"
-                                "1. 問題番号と問題文の概要（例：(4)のア 低気圧が発達しやすい地点を選ぶ問題など）\n"
-                                "2. 図の内容（例：日本付近の天気図、1〜4の選択肢の位置、低気圧や等圧線の状態）\n"
-                                "※「読めない」とは回答せず、目視できる情報を箇条書きで簡潔に整理してください。"
+                                "この問題画像を精密に解析し、以下の情報を正確に文字起こしして要約してください。\n"
+                                "1. 問われている問題の本文（特に「積乱雲」「低気圧」「発達しやすい」などのキーワードをそのまま抜き出すこと）\n"
+                                "2. 小問（ア・イなど）の内容\n"
+                                "3. 図に書かれている選択肢（1〜4の番号）や等圧線の位置関係"
                             )
                         },
                         {
@@ -183,7 +184,7 @@ if st.button("送信する", type="primary"):
                         messages=[{"role": "user", "content": ocr_prompt}],
                         max_tokens=800
                     )
-                    extracted_image_context = f"\n\n【画像から読み取った問題の整理データ】:\n{ocr_response.choices[0].message.content}"
+                    extracted_image_context = f"\n\n【画像から読み取った正確な問題データ】:\n{ocr_response.choices[0].message.content}"
 
                 # 【ノード2：挽回先生対話ノード】
                 current_prompt = f"{user_text}{extracted_image_context}"
@@ -199,7 +200,7 @@ if st.button("送信する", type="primary"):
 
                 assistant_reply = response.choices[0].message.content
 
-                # セッション履歴（見た目）にはテキストのみを保存
+                # セッション履歴（見た目）にはテキストのみを綺麗に保存
                 st.session_state.messages.append({"role": "user", "content": user_text})
                 st.session_state.messages.append({"role": "assistant", "content": assistant_reply})
 
