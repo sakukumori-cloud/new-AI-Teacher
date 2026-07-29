@@ -173,10 +173,8 @@ if st.button("送信する", type="primary"):
                             "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
                         }
                     ]
-                    ocr_response = client.chat.completions.create(
-    model="gpt-4o",
-    messages=[{"role": "user", "content": ocr_prompt}],
-    max_tokens=800
+                    ocr_response = client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": ocr_prompt}],
+                   max_tokens=800
 )
                      
                     extracted_image_context = f"\n\n【画像から読み取った正確な問題データ】:\n{ocr_response.choices[0].message.content}"
