@@ -212,7 +212,7 @@ if st.button("送信する", type="primary"):
                 st.session_state.messages.append({"role": "user", "content": user_content})
 
                 # APIに送るメッセージリストを生成 (システムプロンプト + 過去の会話履歴)
-                api_messages = [{"role": "system", "content": system_prompt}] + st.session_state.messages
+                api_messages = ( [{"role": "system", "content": system_prompt}] + st.session_state.messages  + [{"role": "system", "content": "【重要再確認】解説や要約は書かず、目の前の1歩だけを100文字以内で短く問いかけてください。"}])
 
                 response = client.chat.completions.create(
                     model="gpt-4o-mini",
