@@ -159,28 +159,33 @@ if st.button("送信する", type="primary"):
             try:
                 user_text = user_input if user_input else "この問題を教えてください。"
                 
-                # 【ノード1：裏側での画像解析・文字起こし処理】
+                # 【ノード1：裏側での画像解析・状況整理処理】
                 extracted_image_context = ""
                 if image is not None:
                     base64_image = encode_image(image)
                     ocr_prompt = [
                         {
                             "type": "text",
-                            "text": "この問題画像に書かれているテキスト、小問（アやイなど）、選択肢、図の記号（1〜4など）を正確に読み取り、要約せずに文字起こししてください。"
+                            "text": (
+                                "この問題画像の内容を解析し、挽回先生に伝えるための要約データを作成してください。\n"
+                                "1. 問題番号と問題文の概要（例：(4)のア 低気圧が発達しやすい地点を選ぶ問題など）\n"
+                                "2. 図の内容（例：日本付近の天気図、1〜4の選択肢の位置、低気圧や等圧線の状態）\n"
+                                "※「読めない」とは回答せず、目視できる情報を箇条書きで簡潔に整理してください。"
+                            )
                         },
                         {
                             "type": "image_url",
                             "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
                         }
                     ]
-                    ocr_response = client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": ocr_prompt}],
-                   max_tokens=800
-)
-                     
-                    extracted_image_context = f"\n\n【画像から読み取った正確な問題データ】:\n{ocr_response.choices[0].message.content}"
+                    ocr_response = client.chat.completions.create(
+                        model="gpt-4o",
+                        messages=[{"role": "user", "content": ocr_prompt}],
+                        max_tokens=800
+                    )
+                    extracted_image_context = f"\n\n【画像から読み取った問題の整理データ】:\n{ocr_response.choices[0].message.content}"
 
                 # 【ノード2：挽回先生対話ノード】
-                # 画像のナマデータではなく、解析済みテキストだけを挽回先生に渡す
                 current_prompt = f"{user_text}{extracted_image_context}"
                 
                 api_messages = [{"role": "system", "content": system_prompt}] + st.session_state.messages
@@ -194,7 +199,7 @@ if st.button("送信する", type="primary"):
 
                 assistant_reply = response.choices[0].message.content
 
-                # セッション履歴（見た目）にはテキストのみを綺麗に保存
+                # セッション履歴（見た目）にはテキストのみを保存
                 st.session_state.messages.append({"role": "user", "content": user_text})
                 st.session_state.messages.append({"role": "assistant", "content": assistant_reply})
 
