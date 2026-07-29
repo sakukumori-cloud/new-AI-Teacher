@@ -15,9 +15,20 @@ st.set_page_config(
 )
 
 # --------------------------------------------------
+# 会話履歴の初期化
+# --------------------------------------------------
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# --------------------------------------------------
 # サイドバー（設定・カスタマイズエリア）
 # --------------------------------------------------
 st.sidebar.title("⚙️ 画面表示・設定")
+
+# 1. 会話リセットボタン
+if st.sidebar.button("💬 会話履歴をリセット", use_container_width=True):
+    st.session_state.messages = []
+    st.rerun()
 
 st.sidebar.subheader("1. ヘッダー情報の変更")
 custom_caption = st.sidebar.text_input(
@@ -38,7 +49,6 @@ image_option = st.sidebar.radio(
 teacher_img = None
 
 if image_option == "標準（teacher.jpgまたはサンプル）":
-    # app.pyフォルダの中、または直下の teacher.jpg を探す
     if os.path.exists("app.py/teacher.jpg"):
         teacher_img = "app.py/teacher.jpg"
     elif os.path.exists("teacher.jpg"):
@@ -70,8 +80,27 @@ custom_info = st.sidebar.text_area(
     height=150
 )
 
+# 4. プロンプト調整機能
+st.sidebar.markdown("---")
+st.sidebar.subheader("🧪 AI先生の指示（プロンプト調整）")
+st.sidebar.caption("先生の性格や答え方をここで直接テスト・修正できます。")
+
+default_system_prompt = """あなたは親切で教え上手な個別指導の先生「チャット先生」です。
+
+【重要ルール】
+1. 画像が送られた場合は、まず画像内の問題テキスト、図、記号、問題番号を正確に読み取り、何についての問題か（例：岩石の性質、二次関数など）を特定してください。
+2. 抽象的な精神論（「図をよく見ましょう」など）だけで終わらせず、具体的な手順・計算式・解法のポイントを明確に示してください。
+3. 生徒が「答えを教えて」「答えは？」と具体的に聞いてきた場合は、焦らさずにズバリ結論や答えをわかりやすく提示した上で解説してください。
+4. 生徒を否定せず、最後は前向きになれる温かい言葉で励ましてください。"""
+
+system_prompt = st.sidebar.text_area(
+    "システムプロンプト（AIへの指示文）",
+    value=default_system_prompt,
+    height=250
+)
+
 # --------------------------------------------------
-# 1. ヘッダーエリア（サイドバーの設定を反映）
+# 1. ヘッダーエリア
 # --------------------------------------------------
 st.caption(custom_caption)
 st.title(custom_title)
@@ -111,13 +140,37 @@ if not api_key:
 
 client = openai.OpenAI(api_key=api_key)
 
+# 画像エンコード関数の強化（リサイズとRGB変換による精度向上）
 def encode_image(image):
     buffered = io.BytesIO()
-    image.save(buffered, format="JPEG")
+    img = image.convert("RGB")
+    img.thumbnail((1024, 1024))  # Vision API用に最適なサイズに調整
+    img.save(buffered, format="JPEG", quality=85)
     return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
 # --------------------------------------------------
-# 4. ユーザー入力・アップロードエリア
+# 4. これまでの会話履歴表示
+# --------------------------------------------------
+st.subheader("💬 チャット履歴")
+
+for msg in st.session_state.messages:
+    if msg["role"] == "user":
+        # ユーザー発言のテキスト部分を取得して表示
+        text_content = ""
+        if isinstance(msg["content"], list):
+            for c in msg["content"]:
+                if c.get("type") == "text":
+                    text_content += c.get("text", "")
+        else:
+            text_content = msg["content"]
+        st.chat_message("user").write(text_content)
+    elif msg["role"] == "assistant":
+        st.chat_message("assistant").write(msg["content"])
+
+st.markdown("---")
+
+# --------------------------------------------------
+# 5. ユーザー入力・アップロードエリア
 # --------------------------------------------------
 uploaded_file = st.file_uploader(
     "📷 問題を貼り付け（画像をアップロード）", type=["png", "jpg", "jpeg"]
@@ -134,7 +187,7 @@ user_input = st.text_input(
 )
 
 # --------------------------------------------------
-# 5. 送信・AI回答エリア
+# 6. 送信・AI回答エリア
 # --------------------------------------------------
 if st.button("送信する", type="primary"):
     if not user_input and not uploaded_file:
@@ -142,35 +195,38 @@ if st.button("送信する", type="primary"):
     else:
         with st.spinner("チャット先生が考え中..."):
             try:
+                # ユーザーメッセージのコンテンツ構築
                 user_content = []
 
                 if user_input:
                     user_content.append({"type": "text", "text": user_input})
 
                 if image is not None:
-                    base64_image = encode_image(image.convert("RGB"))
+                    base64_image = encode_image(image)
                     user_content.append({
                         "type": "image_url",
                         "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
                     })
 
-                system_prompt = """
-                あなたは丁寧で親しみやすい個別指導の先生「チャット先生」です。
-                生徒が「今、分からない！」と思っている問題や問題番号に対して、分かりやすく親切に答えてください。
-                解き方のヒントやステップを丁寧に教え、最後は励ましの言葉で締めくくってください。
-                """
+                # セッション履歴にユーザーの発言を追加
+                st.session_state.messages.append({"role": "user", "content": user_content})
+
+                # APIに送るメッセージリストを生成 (システムプロンプト + 過去の会話履歴)
+                api_messages = [{"role": "system", "content": system_prompt}] + st.session_state.messages
 
                 response = client.chat.completions.create(
                     model="gpt-4o-mini",
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_content},
-                    ],
+                    messages=api_messages,
                     max_tokens=1000,
                 )
 
-                st.markdown("### 👩‍🏫 チャット先生からの回答")
-                st.write(response.choices[0].message.content)
+                assistant_reply = response.choices[0].message.content
+
+                # セッション履歴にAIの回答を追加
+                st.session_state.messages.append({"role": "assistant", "content": assistant_reply})
+
+                # 画面を再更新して最新の対話を反映
+                st.rerun()
 
             except Exception as e:
                 st.error(f"エラーが発生しました: {e}")
