@@ -208,21 +208,22 @@ if st.button("送信する", type="primary"):
                 if image is not None:
                     base64_image = encode_image(image)
                    # 画像がある場合の指示文（main.py 内）
-　　　　　　　　　　　　current_user_content = [
+　　　　　　　　　　　# 画像がある場合の指示文（main.py 内）
+current_user_content = [
     {
-      　　　　　　　　  "type": "text", 
-      　　　　　　　　　  "text": (
-       　　　　　　　　     f"{user_text}\n\n"
-        　　　　　　　　　    "【挽回先生としての会話ルール】\n"
-         　　　　　　　　　　   "1. 文字起こしや長文解説は禁止です。\n"
-        　　　　　　　　　　　    "2. 生徒から「分からない」「ヒント」と言われたら、「どれが気になる？」と聞き返してはいけません！"
-         　　　　　　　　　　　　   "必ず『図のどこに注目すればいいか』の具象的なヒントや着眼点を1つ出してください。（例：「中心の近くにある記号や、等圧線が混み合っている場所に着目してみよう。1〜4の中でどれが一番中心に近いかな？」）\n"
-         　　　　　　　　　　　　　   "3. 1回の発言は2〜3行（80文字以内）で、次に生徒が観察すべきポイントを短く示してください。"
+        "type": "text", 
+        "text": (
+            f"{user_text}\n\n"
+            "【挽回先生としての会話ルール】\n"
+            "1. 文字起こしや長文解説は禁止です。\n"
+            "2. 生徒から「分からない」「ヒント」と言われたら、「どれが気になる？」と聞き返してはいけません！"
+            "必ず『図のどこに注目すればいいか』の具象的なヒントや着眼点を1つ出してください。（例：「中心の近くにある記号や、等圧線が混み合っている場所に着目してみよう。1〜4の中でどれが一番中心に近いかな？」）\n"
+            "3. 1回の発言は2〜3行（80文字以内）で、次に生徒が観察すべきポイントを短く示してください。"
         )
     },
-   　　　　　　　　　　 {
-       　　　　　　　　　 "type": "image_url",
-      　　　　　　　　　　  "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
+    {
+        "type": "image_url",
+        "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
     }
 ]
                     api_messages.append({"role": "user", "content": current_user_content})
