@@ -160,7 +160,7 @@ if st.button("送信する", type="primary"):
             try:
                 user_text = user_input if user_input else "この問題を教えてください。"
                 
-                # 【ノード1：裏側での画像解析・文字精密読み取り】
+                # 【ノード1：裏側での画像精密文字起こし処理】
                 extracted_image_context = ""
                 if image is not None:
                     base64_image = encode_image(image)
@@ -168,10 +168,9 @@ if st.button("送信する", type="primary"):
                         {
                             "type": "text",
                             "text": (
-                                "この問題画像を精密に解析し、以下の情報を正確に文字起こしして要約してください。\n"
-                                "1. 問われている問題の本文（特に「積乱雲」「低気圧」「発達しやすい」などのキーワードをそのまま抜き出すこと）\n"
-                                "2. 小問（ア・イなど）の内容\n"
-                                "3. 図に書かれている選択肢（1〜4の番号）や等圧線の位置関係"
+                                "【厳密な文字起こし指示】\n"
+                                "この画像に映っている文字、大問番号、小問番号（（1）①など）、問題文、図の中の記号や注釈を、要約せずに見えたまま全て正確に文字起こししてください。\n"
+                                "「〜に関する問題」のような大雑把な説明や要約は絶対にせず、画像内の生のテキスト・選択肢・空欄番号をそのまま出力してください。"
                             )
                         },
                         {
@@ -182,9 +181,9 @@ if st.button("送信する", type="primary"):
                     ocr_response = client.chat.completions.create(
                         model="gpt-4o",
                         messages=[{"role": "user", "content": ocr_prompt}],
-                        max_tokens=800
+                        max_tokens=1000
                     )
-                    extracted_image_context = f"\n\n【画像から読み取った正確な問題データ】:\n{ocr_response.choices[0].message.content}"
+                    extracted_image_context = f"\n\n【画像に書かれている問題の文字起こしデータ】:\n{ocr_response.choices[0].message.content}"
 
                 # 【ノード2：挽回先生対話ノード】
                 current_prompt = f"{user_text}{extracted_image_context}"
@@ -200,7 +199,7 @@ if st.button("送信する", type="primary"):
 
                 assistant_reply = response.choices[0].message.content
 
-                # セッション履歴（見た目）にはテキストのみを綺麗に保存
+                # セッション履歴（見た目）にはテキストのみを保存
                 st.session_state.messages.append({"role": "user", "content": user_text})
                 st.session_state.messages.append({"role": "assistant", "content": assistant_reply})
 
