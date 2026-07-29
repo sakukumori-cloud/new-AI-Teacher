@@ -14,13 +14,9 @@ st.set_page_config(
     layout="centered",
 )
 
-# 会話履歴・画像文脈の初期化
+# 会話履歴の初期化
 if "messages" not in st.session_state:
     st.session_state.messages = []
-if "extracted_image_context" not in st.session_state:
-    st.session_state.extracted_image_context = ""
-if "last_uploaded_file" not in st.session_state:
-    st.session_state.last_uploaded_file = None
 
 # --------------------------------------------------
 # サイドバー（設定・カスタマイズエリア）
@@ -29,8 +25,6 @@ st.sidebar.title("⚙️ 画面表示・設定")
 
 if st.sidebar.button("💬 会話履歴をリセット", use_container_width=True):
     st.session_state.messages = []
-    st.session_state.extracted_image_context = ""
-    st.session_state.last_uploaded_file = None
     st.rerun()
 
 st.sidebar.subheader("1. ヘッダー情報の変更")
@@ -69,25 +63,20 @@ custom_info = st.sidebar.text_area(
 st.sidebar.markdown("---")
 st.sidebar.subheader("🧪 AI先生の指示（プロンプト調整）")
 
-default_system_prompt = """あなたは個別指導のベテランの「挽回先生」です。生徒と対話しながら生徒が送ってきた分からない問題、解き方に自信がない問題などを生徒と一緒に解いていきます。
+default_system_prompt = """あなたは個別指導のベテランの「挽回先生」です。生徒が送ってきた画像と質問をもとに、対話しながら一緒に解いていきます。
 
-【入力情報】
-ユーザーから背景知識（画像から解析された問題テキスト）とメッセージが送られてきます。
+【最重要ルール】
+- 添付された画像を必ず注意深く観察し、画像に実際に書かれている具体語（例：消化管、血管、器官名、選択肢ア〜オなど）を必ず使って回答してください。
+- 抽象的な表現（「与えられた条件」「計算を行う問題」「図の情報」など）で誤魔化すことは絶対に禁止です。
 
 【進め方】
-① 最初の1回目のみ、送られてきた情報をもとに「ようこそ、チャット先生です！一緒に分からない問題を解いていきましょうね。まず、分からない問題を確認します。問題は『〜』でよいですか？」と確認してください。
-（※この確認の挨拶は、会話の開始時の「最初の1回」だけであり、途中で話題が変わっても絶対に繰り返さないこと）
+① 最初の1回目のみ：
+送られてきた画像から生徒が指定した問題（例：2(1)）の【実際の問いの文】を読み取り、「ようこそ、チャット先生です！一緒に分からない問題を解いていきましょうね。まず、分からない問題を確認します。問題は『（ここに画像から読み取った具体的な問題文を入れる）』でよいですか？」と確認してください。
 
-② 問題が確認できたら、画像や文章の内容を概略でまとめ、「問題の意味は分かりますか？」と問いかけます。
+② 生徒が「はい」と答えたら：
+画像の中の具体的な注目ポイント（図の名称や文の空欄など）を1つ挙げて、「問題の意味は分かりますか？」または「どの選択肢だと思う？」と短く問いかけて対話を始めてください。
 
-③ 以降は生徒との対話で学習を進め、正答へ導きます。生徒が指示した問題番号（例：「(1)からお願いします」）を正確に読み取り、ブレずにその問題の解説を進めてください。
-
-# 【言葉選び・対話の最重要ルール】
-- 画像解析データに含まれる文章・選択肢を熟読し、生徒に「文の内容を教えて」などと聞き返すことは【絶対禁止】です。必ずデータ内から該当部分を探して指導してください。
-- 生徒への質問は分かりやすく、簡潔に、1〜2行でまとめて行ってください。
-- 説明を行う場合、その説明内容区切りごとに「ここまで分かりますか？」と生徒に問いかけましょう。
-- 答えは生徒が要望しない限りギリギリまで出さず、あくまでも「正答へ導く」のが仕事と考えて臨んでください。
-- 正解に達したら、無理に次の難題を被せず、達成感を認めて次の問題に進むか生徒に聞いてください。"""
+③ 返答は分かりやすく、1〜3行程度の短文で行ってください。"""
 
 system_prompt = st.sidebar.text_area("システムプロンプト（AIへの指示文）", value=default_system_prompt, height=250)
 
@@ -164,53 +153,39 @@ if st.button("送信する", type="primary"):
         with st.spinner("挽回先生がノートを確認中..."):
             try:
                 user_text = user_input if user_input else "この問題を教えてください。"
+
+                # APIに送るメッセージ配列を作成
+                api_messages = [{"role": "system", "content": system_prompt}]
                 
-                # 新しいファイルがアップロードされた時だけ「ノード1（精密OCR解析）」を実行
-                if uploaded_file is not None and uploaded_file != st.session_state.last_uploaded_file:
+                # 過去の会話履歴を追加
+                for m in st.session_state.messages:
+                    api_messages.append({"role": m["role"], "content": m["content"]})
+
+                # 画像がある場合は、今回送信する最新メッセージに画像を直接添えてGPT-4oに渡す
+                if image is not None:
                     base64_image = encode_image(image)
-                    ocr_prompt = [
-                        {
-                            "type": "text",
-                            "text": (
-                                "この画像に写っている【大問番号・小問番号・すべての問題文・選択肢ア〜オの内容・図や表の注記】を省略せずに完全に文字起こししてください。\n"
-                                "特に(1)、(2)、(3)など各小問ごとの問いのテキストと選択肢を正確に分けて記載してください。"
-                            )
-                        },
+                    current_content = [
+                        {"type": "text", "text": user_text},
                         {
                             "type": "image_url",
                             "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
                         }
                     ]
-                    ocr_response = client.chat.completions.create(
-                        model="gpt-4o",
-                        messages=[{"role": "user", "content": ocr_prompt}],
-                        max_tokens=1000
-                    )
-                    # 解析データを固定保存
-                    st.session_state.extracted_image_context = f"\n\n【画像から文字起こしした完全問題データ】:\n{ocr_response.choices[0].message.content}"
-                    st.session_state.last_uploaded_file = uploaded_file
+                else:
+                    current_content = user_text
 
-                # システムプロンプトに「問題データ」を結合（ユーザー発言と混ぜない）
-                full_system_prompt = f"{system_prompt}{st.session_state.extracted_image_context}"
+                api_messages.append({"role": "user", "content": current_content})
 
-                # APIメッセージ構築
-                api_messages = [{"role": "system", "content": full_system_prompt}]
-                for m in st.session_state.messages:
-                    api_messages.append({"role": m["role"], "content": m["content"]})
-                
-                # 今回のユーザー発言を追加
-                api_messages.append({"role": "user", "content": user_text})
-
-                # ノード2（対話AI）実行
+                # GPT-4o（高精度Visionモデル）を実行
                 response = client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model="gpt-4o",
                     messages=api_messages,
                     max_tokens=800,
                 )
 
                 assistant_reply = response.choices[0].message.content
 
-                # セッション履歴に追加
+                # 履歴にはテキストのみを追加保存
                 st.session_state.messages.append({"role": "user", "content": user_text})
                 st.session_state.messages.append({"role": "assistant", "content": assistant_reply})
 
