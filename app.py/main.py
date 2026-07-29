@@ -69,18 +69,18 @@ custom_info = st.sidebar.text_area(
 st.sidebar.markdown("---")
 st.sidebar.subheader("🧪 AI先生の指示（プロンプト調整）")
 
-default_system_prompt = """あなたは個別指導のベテランの「挽回先生」です。生徒が提示した問題について、対話しながら一緒に解いていきます。
+default_system_prompt = """あなたは個別指導のベテランの「挽回先生」です。生徒が送ってきた画像と質問をもとに、対話しながら一緒に解いていきます。
 
-【最重要ルール】
-- あなたには【プリントの文字起こしデータ】が提示されます。生徒が「2(1)」と言ったら、必ずデータ内の「大問2」の「(1)」の文章・問いのみを正確に読み取ってください。絶対に大問3や大问4など他の問題の文章と混ぜないでください。
-- 生徒への回答は、データ内に書かれている具体的な言葉（器官名、選択肢、数値など）を必ず使ってください。
+【最重要：問題番号の照合ルール】
+1. あなたの手元には「画像の文字起こしデータ」と「実際の画像」の両方があります。
+2. 生徒が「2(1)」「２（１）」などと入力したら、必ず大問2（または「2」）の配下にある(1)の「問題文」をそのまま正確に特定してください。絶対に関係ない別の問題（大問3や4、図形問題など）とすり替えないでください。
 
 【進め方】
 ① 最初の1回目のみ：
-生徒が指定した問題番号（例：2(1)）に該当する【実際の問いの全文】を文字起こしデータからそのまま読み取り、「ようこそ、チャット先生です！一緒に分からない問題を解いていきましょうね。まず、分からない問題を確認します。問題は『（ここにデータから読み取った正確な問題全文を入れる）』でよいですか？」と確認してください。
+送られてきた画像および文字起こしデータから、生徒が指定した問題番号（例：2(1)）に該当する【実際の問いの全文】を正確に抜き出し、「ようこそ、チャット先生です！一緒に分からない問題を解いていきましょうね。まず、分からない問題を確認します。問題は『（ここに画像・データから読み取った正確な問題文をそのまま入れる）』でよいですか？」と確認してください。
 
 ② 生徒が「はい」と答えたら：
-その問題の具体的な注目ポイントを1つ挙げて、「問題の意味は分かりますか？」または「どの選択肢だと思う？」と短く問いかけて対話を始めてください。
+その問題の具体的な注目ポイント（図の名称や数値など）を1つ挙げて、「問題の意味は分かりますか？」と短く問いかけて対話を始めてください。
 
 ③ 返答は分かりやすく、1〜3行程度の短文で行ってください。"""
 
@@ -126,8 +126,9 @@ client = openai.OpenAI(api_key=api_key)
 def encode_image(image):
     buffered = io.BytesIO()
     img = image.convert("RGB")
-    img.thumbnail((1024, 1024))
-    img.save(buffered, format="JPEG", quality=85)
+    # 認識精度向上のため、画像を極端に縮小せず十分な解像度を保持
+    img.thumbnail((1600, 1600))
+    img.save(buffered, format="JPEG", quality=90)
     return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
 # 会話履歴表示
@@ -156,24 +157,24 @@ if st.button("送信する", type="primary"):
     if not user_input and not uploaded_file:
         st.warning("質問を入力するか、問題を貼り付けてください。")
     else:
-        with st.spinner("挽回先生がノートを確認中..."):
+        with st.spinner("挽回先生が問題を確認中..."):
             try:
                 user_text = user_input if user_input else "この問題を教えてください。"
 
-                # 新しい画像が送られた場合、ステップ1（全文文字起こし解析）を1回だけ実行する
+                # 新しい画像がアップロードされた場合、精密なOCR文字起こしを実行
                 if uploaded_file is not None and uploaded_file.file_id != st.session_state.uploaded_file_id:
                     base64_image = encode_image(image)
                     ocr_prompt = [
                         {
                             "type": "text",
                             "text": (
-                                "この画像に写っている文字を【大問番号】ごとにすべて正確に文字起こししてください。\n"
-                                "形式例:\n"
-                                "【大問1】...\n"
-                                "【大問2】...\n"
-                                "(1) ...\n"
-                                "(2) ...\n"
-                                "大問番号と小問番号を明確に区別して書き出してください。"
+                                "【依頼】この画像に書かれているすべてのテキストを、大問番号・小問番号をそのまま維持して正確に転写してください。\n"
+                                "画像内の文字を絶対に勝手に要約・改変しないでください。\n"
+                                "フォーマット例:\n"
+                                "大問1 ...\n"
+                                " (1) ...\n"
+                                "大問2 ...\n"
+                                " (1) ...\n"
                             )
                         },
                         {
@@ -185,33 +186,41 @@ if st.button("送信する", type="primary"):
                     ocr_res = client.chat.completions.create(
                         model="gpt-4o",
                         messages=[{"role": "user", "content": ocr_prompt}],
-                        max_tokens=1500
+                        max_tokens=2000
                     )
-                    # 文字起こし結果をセッションに保存
                     st.session_state.extracted_text = ocr_res.choices[0].message.content
                     st.session_state.uploaded_file_id = uploaded_file.file_id
 
-                # システムプロンプトに文字起こしデータを背景情報として結合
-                context_info = f"\n\n【プリントの文字起こしデータ】:\n{st.session_state.extracted_text}" if st.session_state.extracted_text else ""
-                full_system_prompt = f"{system_prompt}{context_info}"
+                # 対話メッセージの組み立て
+                full_system_prompt = f"{system_prompt}\n\n【画像から文字起こしした全文データ】:\n{st.session_state.extracted_text}"
 
-                # 会話用APIメッセージ作成
+                # ユーザーメッセージの作成（画像も含めて毎回渡すことで視覚データとテキストデータを完全同期）
+                user_content = []
+                if uploaded_file is not None:
+                    base64_img = encode_image(image)
+                    user_content.append({
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}
+                    })
+                user_content.append({"type": "text", "text": user_text})
+
+                # 会話履歴構築
                 api_messages = [{"role": "system", "content": full_system_prompt}]
                 for m in st.session_state.messages:
                     api_messages.append({"role": m["role"], "content": m["content"]})
                 
-                api_messages.append({"role": "user", "content": user_text})
+                api_messages.append({"role": "user", "content": user_content})
 
-                # 対話用AIを実行
+                # 高精度なgpt-4oで解答生成
                 response = client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model="gpt-4o",
                     messages=api_messages,
                     max_tokens=800,
                 )
 
                 assistant_reply = response.choices[0].message.content
 
-                # 履歴に追加
+                # 履歴に追加（表示用テキストのみ保存）
                 st.session_state.messages.append({"role": "user", "content": user_text})
                 st.session_state.messages.append({"role": "assistant", "content": assistant_reply})
 
