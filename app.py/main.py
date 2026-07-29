@@ -193,27 +193,32 @@ if st.button("送信する", type="primary"):
     if not user_input and not uploaded_file:
         st.warning("質問を入力するか、問題を貼り付けてください。")
     else:
-        with st.spinner("チャット先生が考え中..."):
+        with st.spinner("挽回先生がノートを確認中..."):
             try:
-                # ユーザーメッセージのコンテンツ構築
-                user_content = []
+                # ユーザーの発言（テキスト）を用意
+                user_text = user_input if user_input else "この問題を教えてください。"
 
-                if user_input:
-                    user_content.append({"type": "text", "text": user_input})
+                # 履歴用のユーザーメッセージ構築
+                user_message_for_history = {"role": "user", "content": user_text}
+                
+                # API送信用のメッセージリスト作成
+                api_messages = [{"role": "system", "content": system_prompt}] + st.session_state.messages
 
+                # 画像がある場合、今回の最新メッセージに画像をアタッチする
                 if image is not None:
                     base64_image = encode_image(image)
-                    user_content.append({
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
-                    })
+                    current_user_content = [
+                        {"type": "text", "text": f"{user_text}\n\n※画像が添付されています。画像内の文字や図の番号（1〜4など）をしっかり読み取って対話を始めてください。"},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
+                        }
+                    ]
+                    api_messages.append({"role": "user", "content": current_user_content})
+                else:
+                    api_messages.append({"role": "user", "content": user_text})
 
-                # セッション履歴にユーザーの発言を追加
-                st.session_state.messages.append({"role": "user", "content": user_content})
-
-                # APIに送るメッセージリストを生成 (システムプロンプト + 過去の会話履歴)
-                api_messages = ( [{"role": "system", "content": system_prompt}] + st.session_state.messages  + [{"role": "system", "content": "【重要再確認】解説や要約は書かず、目の前の1歩だけを100文字以内で短く問いかけてください。"}])
-
+                # OpenAI APIへリクエスト (gpt-4o-mini)
                 response = client.chat.completions.create(
                     model="gpt-4o-mini",
                     messages=api_messages,
@@ -222,10 +227,11 @@ if st.button("送信する", type="primary"):
 
                 assistant_reply = response.choices[0].message.content
 
-                # セッション履歴にAIの回答を追加
+                # セッション履歴にはテキストのみを保存（※画像データの累積によるエラー・認識精度低下を防ぐため）
+                st.session_state.messages.append(user_message_for_history)
                 st.session_state.messages.append({"role": "assistant", "content": assistant_reply})
 
-                # 画面を再更新して最新の対話を反映
+                # 画面を更新して最新会話を表示
                 st.rerun()
 
             except Exception as e:
