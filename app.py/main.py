@@ -14,13 +14,9 @@ st.set_page_config(
     layout="centered",
 )
 
-# 会話履歴・抽出テキストの初期化
+# 会話履歴の初期化
 if "messages" not in st.session_state:
     st.session_state.messages = []
-if "extracted_text" not in st.session_state:
-    st.session_state.extracted_text = ""
-if "uploaded_file_id" not in st.session_state:
-    st.session_state.uploaded_file_id = None
 
 # --------------------------------------------------
 # サイドバー（設定・カスタマイズエリア）
@@ -29,8 +25,6 @@ st.sidebar.title("⚙️ 画面表示・設定")
 
 if st.sidebar.button("💬 会話履歴をリセット", use_container_width=True):
     st.session_state.messages = []
-    st.session_state.extracted_text = ""
-    st.session_state.uploaded_file_id = None
     st.rerun()
 
 st.sidebar.subheader("1. ヘッダー情報の変更")
@@ -71,18 +65,24 @@ st.sidebar.subheader("🧪 AI先生の指示（プロンプト調整）")
 
 default_system_prompt = """あなたは個別指導のベテランの「挽回先生」です。生徒が送ってきた画像と質問をもとに、対話しながら一緒に解いていきます。
 
-【最重要：問題番号の照合ルール】
-1. あなたの手元には「画像の文字起こしデータ」と「実際の画像」の両方があります。
-2. 生徒が「2(1)」「２（１）」などと入力したら、必ず大問2（または「2」）の配下にある(1)の「問題文」をそのまま正確に特定してください。絶対に関係ない別の問題（大問3や4、図形問題など）とすり替えないでください。
+【最重要：問題番号の特定手順】
+1. 生徒が「2(1)」「問2(1)」「２（１）」など『番号のみ』を入力してきた場合、画像の中からまず大きな数字の「2」または「大問2」「問2」があるエリアを見つけてください。
+2. その大問2の領域の中にある「(1)」または「①」の問いを特定してください。絶対に別の（大問3や大問4にある）(1)と間違えないでください。
+3. 画像文面をそのまま全文コピーして出力することはセーフティガードに触れるため【厳禁】です。必ず「〇〇に関する問題」のように1行で短く要約して確認してください。
 
 【進め方】
 ① 最初の1回目のみ：
-送られてきた画像および文字起こしデータから、生徒が指定した問題番号（例：2(1)）に該当する【実際の問いの全文】を正確に抜き出し、「ようこそ、チャット先生です！一緒に分からない問題を解いていきましょうね。まず、分からない問題を確認します。問題は『（ここに画像・データから読み取った正確な問題文をそのまま入れる）』でよいですか？」と確認してください。
+指定された問題（例：2(1)）の内容を画像から確認し、「ようこそ、チャット先生です！一緒に分からない問題を解いていきましょうね。まず、確認ですが『（ここに該当する問題のテーマや問われていることを1行で短く要約）』でよいですか？」と確認してください。
+（例：「『図1の①と②に入る血管の名称を答える問題』でよいですか？」など）
 
 ② 生徒が「はい」と答えたら：
-その問題の具体的な注目ポイント（図の名称や数値など）を1つ挙げて、「問題の意味は分かりますか？」と短く問いかけて対話を始めてください。
+その問題のポイントを1つ短く示し、「問題の意味は分かりますか？」などと問いかけて対話をスタートしてください。
 
-③ 返答は分かりやすく、1〜3行程度の短文で行ってください。"""
+③ 返答は分かりやすく、1〜3行程度の短文で行ってください。
+
+# 【対話ルール】
+- 答えは生徒が要望しない限りギリギリまで出さず、あくまでも「正答へ導く」対話を行ってください。
+- 生徒が正解したら「大正解です！この問題はクリアですね。次に進みますか？」と区切りをつけてください。"""
 
 system_prompt = st.sidebar.text_area("システムプロンプト（AIへの指示文）", value=default_system_prompt, height=250)
 
@@ -109,7 +109,7 @@ st.markdown("---")
 st.subheader("🔷 学習の仕方")
 st.write(
     "1. 下の **「画像をアップロード」** に問題の写真を貼り付けます（任意）。\n"
-    "2. **「質問・問題番号入力」** に「2(1)をお願いします」などと入力します。\n"
+    "2. **「質問・問題番号入力」** に「2(1)」など問題番号のみを入力します。\n"
     "3. **「送信する」** ボタンを押すと、挽回先生と一緒に解き進められます！"
 )
 
@@ -126,9 +126,8 @@ client = openai.OpenAI(api_key=api_key)
 def encode_image(image):
     buffered = io.BytesIO()
     img = image.convert("RGB")
-    # 認識精度向上のため、画像を極端に縮小せず十分な解像度を保持
-    img.thumbnail((1600, 1600))
-    img.save(buffered, format="JPEG", quality=90)
+    img.thumbnail((1200, 1200))
+    img.save(buffered, format="JPEG", quality=85)
     return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
 # 会話履歴表示
@@ -148,7 +147,7 @@ if uploaded_file is not None:
     image = Image.open(uploaded_file)
     st.image(image, caption="貼り付けされた問題画像", use_column_width=True)
 
-user_input = st.text_input("✍️ 質問・問題番号を入力", placeholder="例：2(1)をお願いします！")
+user_input = st.text_input("✍️ 質問・問題番号を入力", placeholder="例：2(1)")
 
 # --------------------------------------------------
 # 送信・AI回答エリア
@@ -161,40 +160,13 @@ if st.button("送信する", type="primary"):
             try:
                 user_text = user_input if user_input else "この問題を教えてください。"
 
-                # 新しい画像がアップロードされた場合、精密なOCR文字起こしを実行
-                if uploaded_file is not None and uploaded_file.file_id != st.session_state.uploaded_file_id:
-                    base64_image = encode_image(image)
-                    ocr_prompt = [
-                        {
-                            "type": "text",
-                            "text": (
-                                "【依頼】この画像に書かれているすべてのテキストを、大問番号・小問番号をそのまま維持して正確に転写してください。\n"
-                                "画像内の文字を絶対に勝手に要約・改変しないでください。\n"
-                                "フォーマット例:\n"
-                                "大問1 ...\n"
-                                " (1) ...\n"
-                                "大問2 ...\n"
-                                " (1) ...\n"
-                            )
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
-                        }
-                    ]
-                    
-                    ocr_res = client.chat.completions.create(
-                        model="gpt-4o",
-                        messages=[{"role": "user", "content": ocr_prompt}],
-                        max_tokens=2000
-                    )
-                    st.session_state.extracted_text = ocr_res.choices[0].message.content
-                    st.session_state.uploaded_file_id = uploaded_file.file_id
+                api_messages = [{"role": "system", "content": system_prompt}]
 
-                # 対話メッセージの組み立て
-                full_system_prompt = f"{system_prompt}\n\n【画像から文字起こしした全文データ】:\n{st.session_state.extracted_text}"
+                # 過去の履歴をセット
+                for m in st.session_state.messages:
+                    api_messages.append({"role": m["role"], "content": m["content"]})
 
-                # ユーザーメッセージの作成（画像も含めて毎回渡すことで視覚データとテキストデータを完全同期）
+                # 今回の入力（画像も添付）
                 user_content = []
                 if uploaded_file is not None:
                     base64_img = encode_image(image)
@@ -204,14 +176,8 @@ if st.button("送信する", type="primary"):
                     })
                 user_content.append({"type": "text", "text": user_text})
 
-                # 会話履歴構築
-                api_messages = [{"role": "system", "content": full_system_prompt}]
-                for m in st.session_state.messages:
-                    api_messages.append({"role": m["role"], "content": m["content"]})
-                
                 api_messages.append({"role": "user", "content": user_content})
 
-                # 高精度なgpt-4oで解答生成
                 response = client.chat.completions.create(
                     model="gpt-4o",
                     messages=api_messages,
@@ -220,7 +186,6 @@ if st.button("送信する", type="primary"):
 
                 assistant_reply = response.choices[0].message.content
 
-                # 履歴に追加（表示用テキストのみ保存）
                 st.session_state.messages.append({"role": "user", "content": user_text})
                 st.session_state.messages.append({"role": "assistant", "content": assistant_reply})
 
