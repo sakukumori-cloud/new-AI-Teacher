@@ -208,7 +208,14 @@ if st.button("送信する", type="primary"):
                 if image is not None:
                     base64_image = encode_image(image)
                     current_user_content = [
-                        {"type": "text", "text": f"{user_text}\n\n※画像が添付されています。画像内の文字や図の番号（1〜4など）をしっかり読み取って対話を始めてください。"},
+                        {
+                            "type": "text", 
+                            "text": (
+                                f"{user_text}\n\n"
+                                "【厳禁指示】画像の内容をそのまま文字起こししたり、解説文をまとめ書きすることは絶対に禁止です。"
+                                "画像を確認したら、問題文の文字起こしは一切出力せず、すぐ横にいる先生として「(4)のアだね！図の中の1〜4の番号は見えてるかな？」というように、50文字以内の短い問いかけだけを1文返してください。"
+                            )
+                        },
                         {
                             "type": "image_url",
                             "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
@@ -227,7 +234,7 @@ if st.button("送信する", type="primary"):
 
                 assistant_reply = response.choices[0].message.content
 
-                # セッション履歴にはテキストのみを保存（※画像データの累積によるエラー・認識精度低下を防ぐため）
+                # セッション履歴にはテキストのみを保存（画像データの累積による認識低下を防止）
                 st.session_state.messages.append(user_message_for_history)
                 st.session_state.messages.append({"role": "assistant", "content": assistant_reply})
 
