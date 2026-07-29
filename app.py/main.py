@@ -38,7 +38,10 @@ image_option = st.sidebar.radio(
 teacher_img = None
 
 if image_option == "標準（teacher.jpgまたはサンプル）":
-    if os.path.exists("teacher.jpg"):
+    # app.pyフォルダの中、または直下の teacher.jpg を探す
+    if os.path.exists("app.py/teacher.jpg"):
+        teacher_img = "app.py/teacher.jpg"
+    elif os.path.exists("teacher.jpg"):
         teacher_img = "teacher.jpg"
     else:
         teacher_img = "https://raw.githubusercontent.com/twitter/twemoji/master/assets/72x72/1f9d1-200d-1f3eb.png"
