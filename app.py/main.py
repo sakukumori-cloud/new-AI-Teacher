@@ -14,9 +14,7 @@ st.set_page_config(
     layout="centered",
 )
 
-# --------------------------------------------------
 # 会話履歴の初期化
-# --------------------------------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -31,14 +29,8 @@ if st.sidebar.button("💬 会話履歴をリセット", use_container_width=Tru
     st.rerun()
 
 st.sidebar.subheader("1. ヘッダー情報の変更")
-custom_caption = st.sidebar.text_input(
-    "サブタイトル（キャッチフレーズ）",
-    value="－個別指導アシスタント－"
-)
-custom_title = st.sidebar.text_input(
-    "メインタイトル",
-    value="チャット先生！"
-)
+custom_caption = st.sidebar.text_input("サブタイトル", value="－個別指導アシスタント－")
+custom_title = st.sidebar.text_input("メインタイトル", value="チャット先生！")
 
 st.sidebar.subheader("2. 先生の画像設定")
 image_option = st.sidebar.radio(
@@ -47,7 +39,6 @@ image_option = st.sidebar.radio(
 )
 
 teacher_img = None
-
 if image_option == "標準（teacher.jpgまたはサンプル）":
     if os.path.exists("app.py/teacher.jpg"):
         teacher_img = "app.py/teacher.jpg"
@@ -55,14 +46,9 @@ if image_option == "標準（teacher.jpgまたはサンプル）":
         teacher_img = "teacher.jpg"
     else:
         teacher_img = "https://raw.githubusercontent.com/twitter/twemoji/master/assets/72x72/1f9d1-200d-1f3eb.png"
-
 elif image_option == "画像URLを指定":
-    url_input = st.sidebar.text_input(
-        "画像のURLを入力",
-        value="https://raw.githubusercontent.com/twitter/twemoji/master/assets/72x72/1f9d1-200d-1f3eb.png"
-    )
+    url_input = st.sidebar.text_input("画像のURLを入力", value="https://raw.githubusercontent.com/twitter/twemoji/master/assets/72x72/1f9d1-200d-1f3eb.png")
     teacher_img = url_input if url_input else None
-
 elif image_option == "PCから画像をアップロード":
     sidebar_file = st.sidebar.file_uploader("先生の画像をアップロード", type=["png", "jpg", "jpeg"])
     if sidebar_file is not None:
@@ -71,38 +57,32 @@ elif image_option == "PCから画像をアップロード":
 st.sidebar.subheader("3. 案内メッセージの変更")
 custom_info = st.sidebar.text_area(
     "メッセージ文章",
-    value=(
-        "挽回先生です！\n\n"
-        "間違えた問題や解き方に自信がない問題について、"
-        "一緒にやり取りしながら解決を目指します。"
-    ),
+    value="挽回先生です！\n\n間違えた問題や解き方に自信がない問題について、一緒にやり取りしながら解決を目指します。",
     height=150
 )
 
-# 4. プロンプト調整機能
 st.sidebar.markdown("---")
 st.sidebar.subheader("🧪 AI先生の指示（プロンプト調整）")
 
-default_system_prompt = """あなたは個別指導のベテラン講師「挽回先生」です。生徒のすぐ横でノートを一緒に覗き込みながら、一歩ずつ対話で解いていきます。
+# DifyのプロンプトをStreamlit用に最適化
+default_system_prompt = """あなたは個別指導のベテランの「挽回先生」です。生徒と対話しながら生徒が送ってきた分からない問題、解き方に自信がない問題などを生徒と一緒に解いていきます。
 
-【絶対ルール：オウム返しの禁止と「指差しヒント」】
-1. 「どれが気になる？」「具体的に教えて」という丸投げの聞き返しは【完全禁止】です。
-   生徒が「分からない」「ヒント」と言ったら、質問で返すのではなく、図や問題文の「見るべき注目ポイント」を先生から1つ指し示してください。
+【進め方】
+① 最初の1回目のみ、送られてきた情報をもとに「ようこそ、チャット先生です！一緒に分からない問題を解いていきましょうね。まず、分からない問題を確認します。問題は『〜』でよいですか？」と確認してください。
+（※この確認の挨拶は、会話の開始時の「最初の1回」だけであり、途中で話題が変わっても絶対に繰り返さないこと）
 
-2. ヒントの出し方（具象的な指差し）
-   「低気圧が発達しやすい場所＝中心の近くや前線の近く」といった知識を踏まえて、「図の中心に近い1〜4の番号はどれかな？」のように、生徒が図を探せるヒントを出してください。
+② 問題が確認できたら、内容の概略を1〜2行で示し「問題の意味は分かりますか？」または図の見るべきポイントを短く問いかけます。
 
-3. 1回の発言は80文字以内（2〜3行）
-   長文解説は一切書かず、LINEのように短文でキャッチボールをしてください。
+③ 以降は生徒との対話で学習を進め、正答へ導きます。生徒が正しい根拠や番号（例：「3」）を答えたら、無駄に話を延ばさず「大正解です！この問題はこれでクリアですね！次に進みますか？」と区切りをつけてください。
 
-4. 口調とマインド
-   「（4）のアだね！」「よし、じゃあ図の真ん中あたりを見てみようか」といった、温かく親しみやすい先生の話し言葉（〜だね、〜かな？）で接してください。"""
+# 【言葉選び・対話の最重要ルール】
+- 送られてきた文字や図の情報以外の「勝手な補足（存在しない言葉を付け加えること）」は絶対禁止です。
+- 生徒への質問は分かりやすく、簡潔に、1〜2行でまとめて行ってください。
+- 説明を行う場合、その説明内容区切りごとに「ここまで分かりますか？」と生徒に問いかけましょう。
+- 答えは生徒が要望しない限りギリギリまで出さず、あくまでも「正答へ導く」のが仕事と考えて臨んでください。
+- 正解に達したら、無理に次の難題を被せず、達成感を認めて次の問題に進むか生徒に聞いてください。"""
 
-system_prompt = st.sidebar.text_area(
-    "システムプロンプト（AIへの指示文）",
-    value=default_system_prompt,
-    height=250
-)
+system_prompt = st.sidebar.text_area("システムプロンプト（AIへの指示文）", value=default_system_prompt, height=250)
 
 # --------------------------------------------------
 # 1. ヘッダーエリア
@@ -111,13 +91,11 @@ st.caption(custom_caption)
 st.title(custom_title)
 
 col1, col2 = st.columns([1, 1])
-
 with col1:
     if teacher_img is not None:
         st.image(teacher_img, use_column_width=True)
     else:
         st.warning("画像が設定されていません")
-
 with col2:
     st.info(custom_info)
 
@@ -135,9 +113,7 @@ st.write(
 
 st.markdown("---")
 
-# --------------------------------------------------
-# 3. APIキー設定の確認
-# --------------------------------------------------
+# APIキー設定確認
 api_key = st.secrets.get("OPENAI_API_KEY")
 if not api_key:
     st.error("APIキーの設定を確認してください。SecretsにOPENAI_API_KEYが登録されているか確認しましょう。")
@@ -152,45 +128,28 @@ def encode_image(image):
     img.save(buffered, format="JPEG", quality=85)
     return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
-# --------------------------------------------------
-# 4. これまでの会話履歴表示
-# --------------------------------------------------
+# 会話履歴表示
 st.subheader("💬 チャット履歴")
-
 for msg in st.session_state.messages:
     if msg["role"] == "user":
-        text_content = ""
-        if isinstance(msg["content"], list):
-            for c in msg["content"]:
-                if c.get("type") == "text":
-                    text_content += c.get("text", "")
-        else:
-            text_content = msg["content"]
+        text_content = msg["content"] if isinstance(msg["content"], str) else ""
         st.chat_message("user").write(text_content)
     elif msg["role"] == "assistant":
         st.chat_message("assistant").write(msg["content"])
 
 st.markdown("---")
 
-# --------------------------------------------------
-# 5. ユーザー入力・アップロードエリア
-# --------------------------------------------------
-uploaded_file = st.file_uploader(
-    "📷 問題を貼り付け（画像をアップロード）", type=["png", "jpg", "jpeg"]
-)
-
+# 入力エリア
+uploaded_file = st.file_uploader("📷 問題を貼り付け（画像をアップロード）", type=["png", "jpg", "jpeg"])
 image = None
 if uploaded_file is not None:
     image = Image.open(uploaded_file)
     st.image(image, caption="貼り付けされた問題画像", use_column_width=True)
 
-user_input = st.text_input(
-    "✍️ 質問・問題番号を入力",
-    placeholder="例：(4)のアの解説をお願いします！",
-)
+user_input = st.text_input("✍️ 質問・問題番号を入力", placeholder="例：(4)のアの解説をお願いします！")
 
 # --------------------------------------------------
-# 6. 送信・AI回答エリア
+# 送信・AI回答エリア（2ノード分離処理）
 # --------------------------------------------------
 if st.button("送信する", type="primary"):
     if not user_input and not uploaded_file:
@@ -199,42 +158,45 @@ if st.button("送信する", type="primary"):
         with st.spinner("挽回先生がノートを確認中..."):
             try:
                 user_text = user_input if user_input else "この問題を教えてください。"
-                user_message_for_history = {"role": "user", "content": user_text}
                 
-                api_messages = [{"role": "system", "content": system_prompt}] + st.session_state.messages
-
+                # 【ノード1：裏側での画像解析・文字起こし処理】
+                extracted_image_context = ""
                 if image is not None:
                     base64_image = encode_image(image)
-                    current_user_content = [
+                    ocr_prompt = [
                         {
-                            "type": "text", 
-                            "text": (
-                                f"{user_text}\n\n"
-                                "【挽回先生としての会話ルール】\n"
-                                "1. 文字起こしや長文解説は禁止です。\n"
-                                "2. 生徒から『分からない』『ヒント』と言われたら、『どれが気になる？』と聞き返してはいけません！"
-                                "必ず『図のどこに注目すればいいか』の具体的なヒントや着眼点を1つ出してください。（例：『中心の近くにある記号や、等圧線が混み合っている場所に着目してみよう。1〜4の中でどれが一番中心に近いかな？』）\n"
-                                "3. 1回の発言は2〜3行（80文字以内）で、次に生徒が観察すべきポイントを短く示してください。"
-                            )
+                            "type": "text",
+                            "text": "この問題画像に書かれているテキスト、小問（アやイなど）、選択肢、図の記号（1〜4など）を正確に読み取り、要約せずに文字起こししてください。"
                         },
                         {
                             "type": "image_url",
-                            "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
+                            "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
                         }
                     ]
-                    api_messages.append({"role": "user", "content": current_user_content})
-                else:
-                    api_messages.append({"role": "user", "content": user_text})
+                    ocr_response = client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[{"role": "user", "content": ocr_prompt}],
+                        max_tokens=500
+                    )
+                    extracted_image_context = f"\n\n【画像から読み取った正確な問題データ】:\n{ocr_response.choices[0].message.content}"
+
+                # 【ノード2：挽回先生対話ノード】
+                # 画像のナマデータではなく、解析済みテキストだけを挽回先生に渡す
+                current_prompt = f"{user_text}{extracted_image_context}"
+                
+                api_messages = [{"role": "system", "content": system_prompt}] + st.session_state.messages
+                api_messages.append({"role": "user", "content": current_prompt})
 
                 response = client.chat.completions.create(
                     model="gpt-4o-mini",
                     messages=api_messages,
-                    max_tokens=1000,
+                    max_tokens=800,
                 )
 
                 assistant_reply = response.choices[0].message.content
 
-                st.session_state.messages.append(user_message_for_history)
+                # セッション履歴（見た目）にはテキストのみを綺麗に保存
+                st.session_state.messages.append({"role": "user", "content": user_text})
                 st.session_state.messages.append({"role": "assistant", "content": assistant_reply})
 
                 st.rerun()
