@@ -4,52 +4,47 @@ import os
 import openai
 from PIL import Image
 import streamlit as st
-from streamlit_cropper import st_cropper
 
 st.set_page_config(
-    page_title="チャット先生！ - 個別指導アシスタント",
+    page_title="Alsensei - AI個別指導",
     page_icon="👩‍🏫",
     layout="centered",
 )
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
-if "need_crop" not in st.session_state:
-    st.session_state.need_crop = False
 
-# サイドバー
-st.sidebar.title("⚙️ 画面表示・設定")
+# サイドバー設定
+st.sidebar.title("⚙️ 設定 & ガイド")
 if st.sidebar.button("💬 会話履歴をリセット", use_container_width=True):
     st.session_state.messages = []
-    st.session_state.need_crop = False
     st.rerun()
 
-custom_caption = st.sidebar.text_input("サブタイトル", value="－個別指導アシスタント－")
-custom_title = st.sidebar.text_input("メインタイトル", value="チャット先生！")
-custom_info = st.sidebar.text_area(
-    "メッセージ文章",
-    value="挽回先生です！\n\n間違えた問題や解き方に自信がない問題について、一緒にやり取りしながら解決を目指します。",
-    height=150
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 💡 上手に質問するコツ")
+st.sidebar.markdown(
+    "1. **全体像を写す**: 図表やグラフ、問題文全体が含まれるように撮影・スクショしてください。\n"
+    "2. **質問を具体的に**: 単に「2(1)」だけでなく、「図を見ながら、2(1)の解き方を教えて」のように伝えると精度が上がります。"
 )
 
-default_system_prompt = """あなたは個別指導のベテランの「挽回先生」です。生徒が送ってきた画像と質問をもとに、対話しながら一緒に解いていきます。
+# システムプロンプト（挽回先生のキャラクター設定）
+default_system_prompt = """あなたは優しく分かりやすい個別指導のベテラン講師「挽回先生」です。
+生徒がアップロードした問題の画像（図表・文章を含む全体像）と質問をもとに指導します。
 
-【判定ルール】
-生徒が「2(1)」のように問題番号を指定してきた場合、画像から該当の問題を特定してください。
-1. **問題が明確に特定できた場合**:
-   - フラグキーワード `[TARGET_OK]` を文頭に付けて、「ようこそ、チャット先生です！一緒に分からない問題を解いていきましょうね。まず、確認ですが『（問いのテーマや内容を1行で短く要約）』でよいですか？」と回答してください。
-2. **問題が入り組んでいて特定に自信がない場合**:
-   - フラグキーワード `[NEED_CROP]` を文頭に付けて、「画像内に複数の問題があるため、該当の問題を正確に読み取れませんでした。画面下の枠を動かして、解きたい問題の周辺だけを囲んで再送信してみてください！」と優しく案内してください。"""
+【厳守ルール】
+1. 「〜でよいですか？」といった確認の質問は一切禁止。即座に分かりやすい解説を始めること。
+2. 画像内の図やグラフ、文章をしっかりと読み取り、正確な答えと「なぜそうなるのか」のプロセスを丁寧に教えること。
+3. 中学生にもわかりやすい身近な例えや、暗記のコツも交えて解説すること。
+"""
 
-system_prompt = st.sidebar.text_area("システムプロンプト（AIへの指示文）", value=default_system_prompt, height=250)
+system_prompt = st.sidebar.text_area("システムプロンプト（AIへの指示文）", value=default_system_prompt, height=220)
 
 # メイン画面
-st.caption(custom_caption)
-st.title(custom_title)
-st.info(custom_info)
+st.caption("－個別指導アシスタント－")
+st.title("AI Teachers - 挽回先生")
+st.info("わからない問題の画像（図や文章全体）をアップロードし、解いてほしい問題番号を質問してください。")
 st.markdown("---")
 
-# APIキーの自動読み込み（Secretsから取得）
 api_key = st.secrets.get("OPENAI_API_KEY")
 if not api_key:
     st.error("⚠️ secrets.toml に OPENAI_API_KEY が正しく設定されていません。")
@@ -60,74 +55,74 @@ client = openai.OpenAI(api_key=api_key)
 def encode_image(image):
     buffered = io.BytesIO()
     img = image.convert("RGB")
-    img.thumbnail((1200, 1200))
-    img.save(buffered, format="JPEG", quality=85)
+    # 高画質を維持しつつ、大きすぎる場合はAPI制限用に適度に抑える（最大1600px）
+    img.thumbnail((1600, 1600))
+    img.save(buffered, format="JPEG", quality=90)
     return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
-# チャット履歴
-st.subheader("💬 チャット履歴")
+# チャット履歴の表示
 for msg in st.session_state.messages:
-    st.chat_message(msg["role"]).write(msg["content"])
+    with st.chat_message(msg["role"]):
+        if isinstance(msg["content"], list):
+            for content_item in msg["content"]:
+                if content_item.get("type") == "text":
+                    st.write(content_item["text"])
+                elif content_item.get("type") == "image_url":
+                    st.info("📷 [送信された画像]")
+        else:
+            st.write(msg["content"])
 
-st.markdown("---")
-
-uploaded_file = st.file_uploader("📷 問題を貼り付け（画像をアップロード）", type=["png", "jpg", "jpeg"])
-cropped_img = None
-
+# ファイルアップロード（画面下部）
+uploaded_file = st.file_uploader("📷 問題の画像をアップロード（全体像）", type=["png", "jpg", "jpeg"])
 if uploaded_file is not None:
-    raw_image = Image.open(uploaded_file)
-    if st.session_state.need_crop:
-        st.info("✂️ **解きたい問題の場所だけを枠で囲んでください：**")
-        cropped_img = st_cropper(raw_image, realtime_update=True, box_color='#FF0000', aspect_ratio=None)
-        if cropped_img:
-            st.image(cropped_img, caption="切り抜き領域", use_column_width=True)
-    else:
-        st.image(raw_image, caption="全体画像", use_column_width=True)
+    image_preview = Image.open(uploaded_file)
+    st.image(image_preview, caption="アップロード画像プレビュー", use_column_width=True)
 
-user_input = st.text_input("✍️ 質問・問題番号を入力", placeholder="例：2(1)")
+# チャット入力欄
+user_query = st.chat_input("例：図を見ながら、2(1)の答えと解説を教えて")
 
-if st.button("送信する", type="primary"):
-    if not user_input and not uploaded_file:
-        st.warning("質問を入力するか、問題を貼り付けてください。")
-    else:
-        with st.spinner("挽回先生が問題を確認中..."):
-            try:
-                user_text = user_input if user_input else "この問題を教えてください。"
-                api_messages = [{"role": "system", "content": system_prompt}]
-                for m in st.session_state.messages:
-                    api_messages.append({"role": m["role"], "content": m["content"]})
+if user_query:
+    user_content_api = []
+    current_image = None
+    
+    if uploaded_file is not None:
+        current_image = Image.open(uploaded_file)
+        base64_img = encode_image(current_image)
+        user_content_api.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}
+        })
+    
+    user_content_api.append({"type": "text", "text": user_query})
 
-                user_content = []
-                if uploaded_file is not None:
-                    target_image = cropped_img if (st.session_state.need_crop and cropped_img is not None) else raw_image
-                    base64_img = encode_image(target_image)
-                    user_content.append({
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}
-                    })
-                user_content.append({"type": "text", "text": user_text})
-                api_messages.append({"role": "user", "content": user_content})
+    # 画面表示用のメッセージ履歴に追加
+    st.session_state.messages.append({"role": "user", "content": user_query})
+    with st.chat_message("user"):
+        if uploaded_file is not None:
+            st.image(current_image, width=300)
+        st.write(user_query)
 
-                response = client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=api_messages,
-                    max_tokens=800,
-                )
+    # AIからの応答生成
+    with st.spinner("挽回先生が解答と解説を作成中..."):
+        try:
+            api_messages = [{"role": "system", "content": system_prompt}]
+            
+            for m in st.session_state.messages[:-1]:
+                api_messages.append({"role": m["role"], "content": m["content"] if isinstance(m["content"], str) else "画像を送信しました"})
+            
+            api_messages.append({"role": "user", "content": user_content_api})
 
-                raw_reply = response.choices[0].message.content
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=api_messages,
+                max_tokens=1500,
+            )
 
-                if "[NEED_CROP]" in raw_reply:
-                    st.session_state.need_crop = True
-                    assistant_reply = raw_reply.replace("[NEED_CROP]", "").strip()
-                elif "[TARGET_OK]" in raw_reply:
-                    st.session_state.need_crop = False
-                    assistant_reply = raw_reply.replace("[TARGET_OK]", "").strip()
-                else:
-                    assistant_reply = raw_reply
+            assistant_reply = response.choices[0].message.content
 
-                st.session_state.messages.append({"role": "user", "content": user_text})
-                st.session_state.messages.append({"role": "assistant", "content": assistant_reply})
-                st.rerun()
+            st.session_state.messages.append({"role": "assistant", "content": assistant_reply})
+            with st.chat_message("assistant"):
+                st.write(assistant_reply)
 
-            except Exception as e:
-                st.error(f"エラーが発生しました: {e}")
+        except Exception as e:
+            st.error(f"エラーが発生しました: {e}")
